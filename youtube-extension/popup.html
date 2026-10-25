@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>FocusLock YouTube Allowlist</title>
+<style>
+  body { width: 320px; font-family: sans-serif; background: #1e1e2e; color: #e0e0f0; padding: 12px; }
+  h2 { margin: 0 0 8px; font-size: 15px; }
+  p.hint { color: #8888a0; font-size: 12px; line-height: 1.4; }
+  textarea {
+    width: 100%; height: 80px; background: #2a2a3e; color: #e0e0f0;
+    border: 1px solid #444; border-radius: 4px; padding: 6px; box-sizing: border-box;
+    font-size: 12px; resize: vertical;
+  }
+  button {
+    width: 100%; margin-top: 8px; padding: 8px; background: #f38ba8;
+    color: #1e1e2e; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;
+  }
+  button:disabled { background: #555; color: #999; cursor: not-allowed; }
+  #status { margin-bottom: 8px; font-size: 12px; color: #8888a0; }
+  #status.active { color: #f38ba8; font-weight: bold; }
+</style>
+</head>
+<body>
+  <h2>FocusLock YouTube Allowlist</h2>
+  <div id="status">Loading...</div>
+  <div id="setup">
+    <p class="hint">
+      Run your FocusLock daily YouTube break first (unblocks the domain).
+      Then paste the specific video URL(s) you plan to watch this hour, one
+      per line. Everything else on YouTube stays blocked for the hour, and
+      this list can't be edited once started.
+    </p>
+    <textarea id="urls" placeholder="https://www.youtube.com/watch?v=..."></textarea>
+    <button id="startBtn">Start 1-hour allowlist</button>
+  </div>
+  <script src="video-id.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

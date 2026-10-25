@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=FocusLock
+Comment=Block distracting apps and sites for a set duration
+Icon=focuslock
+Exec=focuslock
+Terminal=false
+Categories=Utility;
+StartupNotify=false

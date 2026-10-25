@@ -1,0 +1,4 @@
+# Tkinter (python3-tk / tk) and PyGObject (python3-gi / python-gobject) come from
+# your distro's packages, not pip.
+pywebview>=5   # web UI (focuslock-webui.py)
+numpy          # ambient sounds (optional; FocusLock runs without it)

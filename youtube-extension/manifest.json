@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "FocusLock YouTube Allowlist",
+  "version": "1.0.0",
+  "description": "Blocks all YouTube pages except the specific video(s) you pre-approve before your daily FocusLock break.",
+  "permissions": ["storage"],
+  "host_permissions": ["*://*.youtube.com/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "FocusLock YouTube Allowlist"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["video-id.js", "content_script.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

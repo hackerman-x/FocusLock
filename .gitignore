@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+venv*/
+.venv/
+
+# Built AppImages and their unpacked contents (published as GitHub Releases)
+*.AppImage
+squashfs-root/
+
+# Trailer videos and music (too big for git; the song isn't ours to share)
+trailer/

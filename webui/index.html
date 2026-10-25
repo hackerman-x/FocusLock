@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>FocusLock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<button id="themeToggle" class="chrome-btn" type="button">Light mode</button>
+
+<div id="app">
+  <div id="loading" class="center-msg">Loading…</div>
+</div>
+
+<!-- ===================== templates ===================== -->
+
+<template id="tpl-setup">
+  <div class="wrap">
+    <div class="header">
+      <div class="title">FocusLock</div>
+      <div class="subtitle">NOT CURRENTLY ACTIVE</div>
+    </div>
+
+    <div class="content">
+      <div class="card">
+        <div class="card-label">STREAK</div>
+        <div class="streak-line"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">ACTIVITY</div>
+        <div class="heatmap"></div>
+        <div class="activity-caption"></div>
+      </div>
+
+      <div class="row" style="justify-content:center; margin: 14px 0;">
+        <label class="field-label">BLOCK FOR</label>
+        <input type="number" id="daysInput" class="num-input" min="0" max="30" value="2">
+        <span class="field-label">DAY(S)</span>
+        <input type="number" id="hoursInput" class="num-input" min="0" max="23" value="0">
+        <span class="field-label">HR(S)</span>
+        <input type="number" id="minutesInput" class="num-input" min="0" max="59" value="0">
+        <span class="field-label">MIN(S)</span>
+      </div>
+
+      <div class="card">
+        <div class="card-label">YOUR FOCUS FOR THIS SESSION (OPTIONAL)</div>
+        <input type="text" id="intentInput" class="text-input" placeholder="e.g. Finish Godot multiplayer tutorial">
+      </div>
+
+      <div class="center-col">
+        <button id="startBlockBtn" class="pill pill-primary pill-lg" type="button">Start Block</button>
+        <div class="footnote">NO EARLY UNLOCK ONCE STARTED — ONLY THE TIMER LIFTS IT</div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-locked">
+  <div class="wrap">
+    <div class="header">
+      <div class="title title-pink">FOCUSLOCK ACTIVE</div>
+      <div class="unlock-at"></div>
+      <div class="countdown"></div>
+    </div>
+
+    <div class="content">
+      <div class="card intent-card" style="display:none;">
+        <div class="card-label">YOUR FOCUS</div>
+        <div class="intent-text"></div>
+      </div>
+
+      <div class="card grow">
+        <div class="card-label">CURRENTLY BLOCKED</div>
+        <div class="blocked-list"></div>
+      </div>
+
+      <div class="youtube-area center-col"></div>
+
+      <div class="footnote">NO EARLY UNLOCK, BY DESIGN — ONLY THE TIMER ABOVE LIFTS THIS</div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-selection-dialog">
+  <div class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-title">SELECT WHAT TO BLOCK</div>
+      <div class="modal-sub">Pick a preset or customize below. This is the last step before the password prompt.</div>
+
+      <div class="card">
+        <div class="card-label">PRESETS</div>
+        <div class="presets-row"></div>
+        <button class="pill pill-ghost pill-sm" id="savePresetBtn" type="button">+ Save current as preset</button>
+      </div>
+
+      <div class="checklist-grid">
+        <div class="checklist-col">
+          <div class="field-label" style="margin-bottom:8px;">APPS</div>
+          <div class="apps-checks"></div>
+        </div>
+        <div class="checklist-col">
+          <div class="field-label" style="margin-bottom:8px;">WEBSITES</div>
+          <div class="domains-checks"></div>
+        </div>
+      </div>
+
+      <div class="row" style="justify-content:center; gap:8px; margin-top:10px;">
+        <button class="pill pill-ghost pill-sm" id="selectAllBtn" type="button">Select all</button>
+        <button class="pill pill-ghost pill-sm" id="selectNoneBtn" type="button">Select none</button>
+      </div>
+
+      <div class="error-text" id="selectionError"></div>
+
+      <div class="row" style="justify-content:center; gap:10px; margin-top:14px;">
+        <button class="pill pill-ghost" id="selectionCancelBtn" type="button">Cancel</button>
+        <button class="pill pill-primary" id="selectionContinueBtn" type="button">Continue</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-password-dialog">
+  <div class="modal-backdrop">
+    <div class="modal modal-narrow">
+      <div class="modal-title modal-title-yellow"></div>
+      <div class="modal-sub summary-lines"></div>
+
+      <label class="field-label" style="display:block; margin-top:14px;">SUDO PASSWORD</label>
+      <input type="password" class="text-input pw-input" autocomplete="off">
+
+      <label class="field-label confirm-label" style="display:block; margin-top:14px;"></label>
+      <input type="text" class="text-input confirm-input" autocomplete="off">
+
+      <div class="error-text pw-error"></div>
+
+      <div class="row" style="justify-content:center; gap:10px; margin-top:16px;">
+        <button class="pill pill-ghost" type="button" data-action="cancel">Cancel</button>
+        <button class="pill pill-primary" type="button" data-action="submit"></button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-name-dialog">
+  <div class="modal-backdrop">
+    <div class="modal modal-narrow">
+      <div class="modal-title">Save Preset</div>
+      <label class="field-label" style="display:block; margin-top:8px;">Name this preset:</label>
+      <input type="text" class="text-input name-input" autocomplete="off">
+      <div class="row" style="justify-content:center; gap:10px; margin-top:16px;">
+        <button class="pill pill-ghost" type="button" data-action="cancel">Cancel</button>
+        <button class="pill pill-primary" type="button" data-action="submit">Save</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>

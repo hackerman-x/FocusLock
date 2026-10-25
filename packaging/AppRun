@@ -1,0 +1,19 @@
+#!/bin/bash
+# FocusLock AppImage entry point.
+#   (no args)  open the FocusLock window
+#   --watch    run the background attempt logger (used by its systemd service)
+HERE="$(dirname "$(readlink -f "$0")")"
+export TCL_LIBRARY="$HERE/usr/share/tcltk/tcl8.6"
+export TK_LIBRARY="$HERE/usr/share/tcltk/tk8.6"
+export TKPATH="$TK_LIBRARY"
+export SSL_CERT_FILE="$HERE/opt/_internal/certs.pem"
+export PYTHONNOUSERSITE=1          # ignore ~/.local Python packages
+unset PYTHONPATH PYTHONHOME
+PY="$HERE/opt/python3.12/bin/python3.12"
+APP="$HERE/usr/share/focuslock"
+
+if [[ "${1:-}" == "--watch" ]]; then
+  shift
+  exec "$PY" "$APP/focuslock_watch.py" "$@"
+fi
+exec "$PY" "$APP/focuslock-gui.py" "$@"
