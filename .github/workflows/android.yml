@@ -13,6 +13,7 @@ defaults:
   run:
     working-directory: android
 
+# ubuntu-latest already has the Android SDK (ANDROID_HOME); Gradle fetches any missing platform.
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,8 +24,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-
-      - uses: android-actions/setup-android@v3
 
       - uses: gradle/actions/setup-gradle@v4
 
@@ -59,8 +58,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-
-      - uses: android-actions/setup-android@v3
 
       - uses: gradle/actions/setup-gradle@v4
 
