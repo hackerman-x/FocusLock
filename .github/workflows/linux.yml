@@ -1,0 +1,46 @@
+name: Linux
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # attach the AppImage to releases
+
+jobs:
+  appimage:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Unit tests
+        run: |
+          pip install pytest
+          python -m pytest tests -q
+
+      - name: Build FocusLock.AppImage
+        run: bash packaging/linux/build-appimage.sh
+
+      - name: Window opens (smoke test)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+          FOCUSLOCK_SMOKE_TEST=8 APPIMAGE_EXTRACT_AND_RUN=1 timeout 120 xvfb-run -a dist/FocusLock.AppImage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FocusLock-AppImage
+          path: dist/FocusLock.AppImage
+
+      - name: Attach the AppImage to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/FocusLock.AppImage
