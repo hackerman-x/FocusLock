@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The lock from icon.svg, scaled into the adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <group
+        android:pivotX="128"
+        android:pivotY="132"
+        android:scaleX="0.62"
+        android:scaleY="0.62">
+        <path
+            android:pathData="M88,120 L88,90 A40,40 0 0,1 168,90 L168,120"
+            android:strokeColor="@color/pink"
+            android:strokeWidth="18"
+            android:strokeLineCap="round" />
+        <path
+            android:fillColor="@color/pink"
+            android:pathData="M82,114 L174,114 A18,18 0 0,1 192,132 L192,196 A18,18 0 0,1 174,214 L82,214 A18,18 0 0,1 64,196 L64,132 A18,18 0 0,1 82,114 Z" />
+        <path
+            android:fillColor="@color/cyan"
+            android:pathData="M128,134 A16,16 0 1,1 127.99,134 Z" />
+        <path
+            android:fillColor="@color/cyan"
+            android:pathData="M119,163 L137,163 L131,194 L125,194 Z" />
+    </group>
+</vector>

@@ -1,0 +1,10 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.kotlin/
+captures/
+# Signing keys come from GitHub secrets, never from the repo.
+*.jks
+*.keystore
