@@ -1,0 +1,4 @@
+# Windows build (Tkinter ships with the python.org installer).
+psutil         # running programs, and the guard task that closes blocked apps
+sounddevice    # ambient sounds
+numpy          # ambient sounds (optional; FocusLock runs without it)

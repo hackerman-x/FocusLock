@@ -17,6 +17,8 @@ import time
 from collections import Counter
 from datetime import datetime, date, timedelta
 
+import focuslock_platform as plat
+
 SELF_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Set by the AppImage runtime to the real path of the .AppImage file. When
@@ -48,18 +50,18 @@ def watcher_command():
         return [APPIMAGE, "--watch"]
     return [sys.executable, os.path.join(SELF_DIR, "focuslock_watch.py")]
 
-LOCKDIR = "/etc/focuslock"
+LOCKDIR = plat.LOCKDIR
 UNLOCK_AT_FILE = os.path.join(LOCKDIR, "unlock_at")
 LOCKED_AT_FILE = os.path.join(LOCKDIR, "locked_at")
 SELECTED_APPS_FILE = os.path.join(LOCKDIR, "selected_apps")
 LAST_USED_FILE = os.path.join(LOCKDIR, "youtube_break_last_used")
 UNTIL_FILE = os.path.join(LOCKDIR, "youtube_break_until")
 INTENT_FILE = os.path.join(LOCKDIR, "intent")
-HOSTS_FILE = "/etc/hosts"
+HOSTS_FILE = plat.HOSTS_FILE
 SITELOG_ADDR = "127.83.76.1"                                  # see focuslock-sitelog.py
-SITELOG_FILE = "/var/lib/focuslock-sitelog/attempts.log"     # written by it, readable by everyone
+SITELOG_FILE = plat.SITELOG_FILE     # written by it, readable by everyone (Linux only)
 
-CONFIG_DIR = os.path.expanduser("~/.config/focuslock")
+CONFIG_DIR = plat.CONFIG_DIR
 STATS_FILE = os.path.join(CONFIG_DIR, "stats.json")
 PRESETS_FILE = os.path.join(CONFIG_DIR, "presets.json")
 HISTORY_FILE = os.path.join(CONFIG_DIR, "history.json")
@@ -94,6 +96,34 @@ APPS = [
     ("unityhub", "Unity Hub"),
     ("aseprite", "Aseprite"),
 ]
+
+# Windows: the same keys where the app exists there (so presets and stats
+# mean the same thing), blocked by program file name -- see focuslock_win.
+# Names with a * only work for the guard task, which matches running
+# programs; the launch-time block needs an exact name.
+WIN_APP_EXES = {
+    "discord": ["Discord.exe"],
+    "minecraft": ["MinecraftLauncher.exe", "Minecraft.exe", "Minecraft.Windows.exe"],
+    "modrinth": ["Modrinth App.exe"],
+    "steam": ["steam.exe"],
+    "roblox_player": ["RobloxPlayerBeta.exe", "RobloxPlayerLauncher.exe"],
+    "stardew": ["Stardew Valley.exe", "StardewModdingAPI.exe"],
+    "godot": ["Godot*.exe"],
+    "unityhub": ["Unity Hub.exe", "Unity.exe"],
+    "aseprite": ["Aseprite.exe"],
+}
+if plat.IS_WINDOWS:
+    APPS = [
+        ("discord", "Discord"),
+        ("minecraft", "Minecraft Launcher"),
+        ("modrinth", "Modrinth App"),
+        ("steam", "Steam"),
+        ("roblox_player", "Roblox"),
+        ("stardew", "Stardew Valley (SMAPI)"),
+        ("godot", "Godot"),
+        ("unityhub", "Unity Hub"),
+        ("aseprite", "Aseprite"),
+    ]
 
 # Shown in their own group and left unticked by default: these are the
 # tools for game-dev work, so blocking them should be a deliberate choice.
@@ -136,12 +166,35 @@ def read_file(path):
         return None
 
 
+_OFFSET_PART = re.compile(r"([+-]?\d+)\s*(day|hour|minute|second)s?\b")
+_OFFSET_UNITS = {"day": 86400, "hour": 3600, "minute": 60, "second": 1}
+
+
+def offset_seconds(offset):
+    """'+2 days +3 hours +0 minutes' -> seconds. Only the forms FocusLock
+    itself builds are understood (it used to pass these to GNU date)."""
+    return sum(int(n) * _OFFSET_UNITS[unit] for n, unit in _OFFSET_PART.findall(offset or ""))
+
+
 def run_date(fmt, offset=None):
-    args = ["date"]
-    if offset is not None:
-        args += ["-d", offset]
-    args.append(fmt)
-    return subprocess.check_output(args, text=True).strip()
+    """Local time now (plus offset), formatted like `date -d offset fmt`."""
+    when = datetime.fromtimestamp(time.time() + offset_seconds(offset)).astimezone()
+    return when.strftime(fmt.lstrip("+")).strip()
+
+
+_STAMP = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}")
+
+
+def parse_unlock_time(text):
+    """Epoch for an unlock time as the lock writes it
+    ('Tuesday, 2026-10-20 23:00:00 IST'), read as local time; None if unreadable."""
+    m = _STAMP.search(text or "")
+    if not m:
+        return None
+    try:
+        return int(datetime.strptime(m.group(0), "%Y-%m-%d %H:%M:%S").timestamp())
+    except (ValueError, OverflowError):
+        return None
 
 
 def detect_blocked_apps():
@@ -169,11 +222,10 @@ def lock_progress():
     ends_human = read_file(UNLOCK_AT_FILE)
     if not started or not ends_human:
         return None
-    try:
-        ends = int(subprocess.check_output(["date", "-d", ends_human, "+%s"], text=True).strip())
-        return int(started), ends
-    except (subprocess.CalledProcessError, ValueError):
+    ends = parse_unlock_time(ends_human)
+    if ends is None or not started.isdigit():
         return None
+    return int(started), ends
 
 
 def domain_groups():
@@ -532,10 +584,67 @@ def core_package_paths(paths):
     return {path for path, ps in owners.items() if any(p in core for p in ps)}
 
 
+# Windows programs that must never be blocked: the shell, sign-in and
+# security, and what the lock and unlock steps themselves run. Blocking is
+# by file name (focuslock_win), so a name here is protected wherever it is.
+WIN_PROTECTED_NAMES = {
+    "explorer.exe", "cmd.exe", "powershell.exe", "pwsh.exe", "powershell_ise.exe", "conhost.exe",
+    "windowsterminal.exe", "wt.exe", "openconsole.exe", "svchost.exe", "winlogon.exe", "csrss.exe",
+    "lsass.exe", "services.exe", "smss.exe", "wininit.exe", "userinit.exe", "logonui.exe",
+    "lockapp.exe", "dwm.exe", "sihost.exe", "ctfmon.exe", "fontdrvhost.exe", "audiodg.exe",
+    "taskmgr.exe", "taskhostw.exe", "regedit.exe", "reg.exe", "mmc.exe", "consent.exe",
+    "runtimebroker.exe", "searchhost.exe", "searchapp.exe", "startmenuexperiencehost.exe",
+    "shellexperiencehost.exe", "textinputhost.exe", "systemsettings.exe", "applicationframehost.exe",
+    "msiexec.exe", "rundll32.exe", "dllhost.exe", "schtasks.exe", "sc.exe", "icacls.exe",
+    "ipconfig.exe", "wscript.exe", "cscript.exe", "msmpeng.exe", "securityhealthsystray.exe",
+    "securityhealthservice.exe", "smartscreen.exe", "msedgewebview2.exe", "python.exe",
+    "pythonw.exe", "py.exe", "pyw.exe", "focuslock.exe", "unins000.exe",
+}
+_WIN_UNSAFE_PATH_CHARS = re.compile(r'[\x00-\x1f*?"<>|]')
+
+
+def win_exe_names(patterns):
+    """The exact (lowercase) file names among WIN_APP_EXES-style entries."""
+    return {p.lower() for p in patterns if "*" not in p}
+
+
+def win_allowed_roots():
+    """Folders custom Windows apps may live in (lowercase, ending in a backslash)."""
+    roots = [os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)"),
+             os.path.join(os.environ.get("SystemDrive") or "C:", "\\Users")]
+    return [os.path.normpath(r).lower().rstrip("\\") + "\\" for r in roots if r]
+
+
+def _check_custom_path_windows(path):
+    if not path or not os.path.isabs(path) or os.path.normpath(path) != path:
+        return "Use a full path like C:\\Games\\Game\\game.exe."
+    if _WIN_UNSAFE_PATH_CHARS.search(path[2:]):
+        return "That path contains characters FocusLock can't safely handle."
+    low = path.lower()
+    if not low.endswith(".exe"):
+        return "Pick the program's .exe file."
+    if not low.startswith(tuple(win_allowed_roots())):
+        return "Only programs in Program Files or your user folder."
+    windir = os.path.normpath(os.environ.get("SystemRoot") or r"C:\Windows").lower() + "\\"
+    if low.startswith((windir, SELF_DIR.lower() + "\\")):
+        return "That's part of Windows or FocusLock itself."
+    if not os.path.isfile(path):
+        return "That isn't a program file."
+    name = os.path.basename(low)
+    builtin = set().union(*(win_exe_names(v) for v in WIN_APP_EXES.values()))
+    if name in builtin:
+        return "That's already one of the built-in apps -- pick it in Start Block instead."
+    if name in WIN_PROTECTED_NAMES:
+        return f"'{name}' is a system tool -- blocking it could break Windows."
+    return None
+
+
 def check_custom_path(path, home=None, core_paths=None):
     """None if path may be blocked, otherwise a short reason why not.
     core_paths, if given, is a precomputed core_package_paths() result
     (used by the scanner to avoid one dpkg call per candidate)."""
+    if plat.IS_WINDOWS:
+        return _check_custom_path_windows(path)
     home = (home or os.path.expanduser("~")).rstrip("/") + "/"
     if not path or not path.startswith("/") or os.path.normpath(path) != path:
         return "Use a full, plain path like /opt/game/game."
@@ -587,8 +696,30 @@ def installed_flatpaks():
     return sorted(apps, key=lambda a: a[1].lower())
 
 
+def _running_programs_windows():
+    try:
+        import psutil
+    except ImportError:
+        return []
+    import getpass
+    me = getpass.getuser().lower()
+    seen, found = set(), []
+    for proc in psutil.process_iter(["exe", "username"]):
+        exe, user = proc.info.get("exe"), (proc.info.get("username") or "")
+        if not exe or exe in seen or user.rsplit("\\", 1)[-1].lower() != me:
+            continue
+        seen.add(exe)
+        if any(h in os.path.basename(exe).lower() for h in _BACKGROUND_HINTS):
+            continue
+        if check_custom_path(exe) is None:
+            found.append((os.path.basename(exe), exe))
+    return sorted(found, key=lambda a: a[0].lower())
+
+
 def running_programs():
     """[(name, exe_path)] of your own running programs that could be blocked."""
+    if plat.IS_WINDOWS:
+        return _running_programs_windows()
     seen, found = set(), []
     uid = os.getuid()
     for pid in os.listdir("/proc"):
@@ -637,6 +768,9 @@ _DOMAIN = re.compile(r"^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z
 # Blocking these would break the lock itself, updates, or the desktop.
 PROTECTED_DOMAINS = {"localhost", "localdomain", "ubuntu.com", "snapcraft.io", "flathub.org",
                      "debian.org", "canonical.com"}
+if plat.IS_WINDOWS:
+    PROTECTED_DOMAINS |= {"microsoft.com", "windows.com", "windowsupdate.com", "live.com",
+                          "microsoftonline.com", "msftconnecttest.com"}
 
 
 def load_custom_sites():
@@ -892,10 +1026,7 @@ def sync_badges(history, user_stats, today=None, now=None, pomo_history=None):
 
 
 def notify(title, message):
-    try:
-        subprocess.run(["notify-send", title, message], timeout=3)
-    except Exception:
-        pass
+    plat.notify(title, message)
 
 
 def check_milestones(prev_stats, new_stats):
@@ -1131,8 +1262,7 @@ SITE_MERGE_SECONDS = 60       # browsers retry and preconnect a lot: one site, o
 
 
 def attempts_path():
-    base = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
-    return os.path.join(base, "focuslock", "attempts.log")
+    return os.path.join(plat.STATE_DIR, "attempts.log")
 
 
 def site_key_for_host(host, groups):
@@ -1153,15 +1283,21 @@ def _read_log_lines(path):
 
 
 def load_attempts(path=None, site_log=None):
-    """[(epoch, key)] oldest first: blocked apps from the user's log, plus
-    blocked websites from the site logger's log (hostnames mapped to site
-    keys). Rapid repeats of the same app/site count once."""
+    """[(epoch, key)] oldest first: blocked apps from the user's log (and on
+    Windows, apps the guard task had to close), plus blocked websites from
+    the site logger's log (hostnames mapped to site keys). Rapid repeats of
+    the same app/site count once."""
     raw = []
-    for line in _read_log_lines(path or attempts_path()):
-        parts = line.rstrip("\n").split("\t")
-        if len(parts) == 2 and parts[0].isdigit() and re.fullmatch(r"[a-z0-9_]{1,48}", parts[1]):
-            raw.append((int(parts[0]), parts[1]))
-    site_lines = _read_log_lines(site_log or SITELOG_FILE)
+    app_logs = [path or attempts_path()]
+    if path is None and plat.GUARD_LOG:
+        app_logs.append(plat.GUARD_LOG)
+    for log in app_logs:
+        for line in _read_log_lines(log):
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) == 2 and parts[0].isdigit() and re.fullmatch(r"[a-z0-9_]{1,48}", parts[1]):
+                raw.append((int(parts[0]), parts[1]))
+    site_log = site_log or SITELOG_FILE
+    site_lines = _read_log_lines(site_log) if site_log else []
     if site_lines:
         groups = domain_groups()
         for line in site_lines:

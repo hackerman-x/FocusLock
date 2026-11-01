@@ -1,0 +1,83 @@
+name: Windows
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # attach the installer to releases
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-windows.txt pyinstaller pytest
+
+      - name: Unit tests
+        run: python -m pytest tests -q
+
+      - name: Build FocusLock.exe
+        run: pyinstaller packaging/windows/focuslock.spec --noconfirm --distpath dist --workpath build
+
+      - name: Build the installer
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.0.0" }
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          & $iscc "/DAppVersion=$version" packaging\windows\installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FocusLock-Setup
+          path: dist/FocusLock-Setup.exe
+
+      - name: Install
+        shell: pwsh
+        run: |
+          $p = Start-Process dist\FocusLock-Setup.exe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Installer failed with $($p.ExitCode)" }
+
+      - name: GUI starts (smoke test + screenshot)
+        shell: pwsh
+        run: |
+          $env:FOCUSLOCK_SMOKE_TEST = "15"
+          $p = Start-Process "$env:ProgramFiles\FocusLock\FocusLock.exe" -PassThru
+          Start-Sleep -Seconds 8
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("$PWD\gui.png")
+          if (-not $p.WaitForExit(60000)) { Stop-Process $p -Force; throw "FocusLock didn't exit: probably an error dialog (see gui.png)" }
+          if ($p.ExitCode -ne 0) { throw "FocusLock exited with $($p.ExitCode)" }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gui-screenshot
+          path: gui.png
+          if-no-files-found: ignore
+
+      - name: End-to-end lock and unlock
+        run: python packaging/windows/e2e_test.py
+
+      - name: Attach installer to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/FocusLock-Setup.exe

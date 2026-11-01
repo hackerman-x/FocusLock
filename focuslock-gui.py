@@ -20,14 +20,15 @@ from tkinter import filedialog, font as tkfont
 from datetime import datetime, date, timedelta
 
 import focuslock_ambient as ambient
+import focuslock_platform as plat
 import focuslock_anim as anim
 import focuslock_scan as scanner
 import focuslock_sound as snd
 import focuslock_watch
 from focuslock_core import (
-    SELF_DIR, privileged_script, watcher_command, UNLOCK_AT_FILE, LAST_USED_FILE, UNTIL_FILE, INTENT_FILE,
+    SELF_DIR, watcher_command, UNLOCK_AT_FILE, LAST_USED_FILE, UNTIL_FILE, INTENT_FILE,
     APPS, DOMAINS, DEV_TOOLS,
-    read_file, run_date, detect_blocked_apps, detect_blocked_domains, lock_progress,
+    read_file, run_date, parse_unlock_time, detect_blocked_apps, detect_blocked_domains, lock_progress,
     load_stats, bump_streak, load_presets, save_presets,
     load_history, record_session, locked_days_from_history, check_milestones,
     compute_stats, session_bounds, sync_badges, load_settings, save_settings, notify,
@@ -323,9 +324,14 @@ def _pick_font(candidates, size, weight="normal"):
     return ("TkDefaultFont", size, weight) if weight != "normal" else ("TkDefaultFont", size)
 
 
+# Tried after a preset's own list, so Windows (which has none of the Linux
+# fonts above) still gets a monospace font where one is meant.
+FALLBACK_FONTS = {"display": ["Consolas"], "mono": ["Consolas", "Courier New"], "body": ["Segoe UI"]}
+
+
 def preset_font(preset, role, size, weight="normal"):
     """A font for one role ("display", "mono" or "body") of a font preset."""
-    return _pick_font(FONT_PRESETS[preset][1][role], size, weight)
+    return _pick_font(FONT_PRESETS[preset][1][role] + FALLBACK_FONTS[role], size, weight)
 
 
 def display_font(size, weight="normal"):
@@ -355,6 +361,12 @@ def hint_floating(window, wtype="dialog"):
         window.attributes("-type", wtype)
     except tk.TclError:
         pass
+
+
+def fmt_date(when, fmt):
+    """strftime, plus %-d (day without a leading zero), which Windows' C
+    library rejects."""
+    return when.strftime(fmt.replace("%-d", str(when.day)))
 
 
 def raise_window(widget):
@@ -2027,7 +2039,7 @@ class GoalHistory(tk.Canvas):
             else:
                 day = self.days[i]
                 state = "goal met" if day.isoformat() in self.met else "not met"
-                self.on_hover(f"{day.strftime('%a %-d %b')}  ·  {format_minutes(self.seconds[i] // 60)}  ·  {state}")
+                self.on_hover(f"{fmt_date(day, '%a %-d %b')}  ·  {format_minutes(self.seconds[i] // 60)}  ·  {state}")
 
     def _draw(self):
         w, n, slot, bar_w = self._geometry()
@@ -2753,7 +2765,9 @@ def dialog_entry(parent, **kw):
 
 
 class PasswordConfirmDialog(tk.Toplevel):
-    """Password + a typed literal confirmation. .result is the password, or None."""
+    """Password + a typed literal confirmation. .result is the password, or None.
+    Without a password step (Windows, which shows its own UAC prompt next)
+    only the confirmation is asked for and .result is ""."""
 
     def __init__(self, parent, title, summary_lines, confirm_word):
         super().__init__(parent)
@@ -2773,11 +2787,18 @@ class PasswordConfirmDialog(tk.Toplevel):
             tk.Label(summary, text=line, font=body_font(10), bg=SURFACE, fg=INK_DIM, justify="left",
                      wraplength=400).pack(anchor="w", padx=14, pady=(10 if i == 0 else 2, 10 if i == len(summary_lines) - 1 else 0))
 
-        tk.Label(self, text="SUDO PASSWORD", font=mono_font(9), bg=BG, fg=CYAN).pack(
-            anchor="w", padx=24, pady=(16, 4)
-        )
-        self.pw_entry = dialog_entry(self, show="•", width=40)
-        self.pw_entry.pack(padx=24, ipady=6, fill="x")
+        if plat.NEEDS_PASSWORD:
+            tk.Label(self, text="SUDO PASSWORD", font=mono_font(9), bg=BG, fg=CYAN).pack(
+                anchor="w", padx=24, pady=(16, 4)
+            )
+            self.pw_entry = dialog_entry(self, show="•", width=40)
+            self.pw_entry.pack(padx=24, ipady=6, fill="x")
+        else:
+            self.pw_entry = None
+            tk.Label(self, text="Windows will ask for administrator permission next.",
+                     font=body_font(10), bg=BG, fg=INK_DIM, justify="left", wraplength=400).pack(
+                anchor="w", padx=24, pady=(14, 0)
+            )
 
         tk.Label(self, text=f'TYPE "{confirm_word}" TO CONFIRM', font=mono_font(9), bg=BG, fg=CYAN).pack(
             anchor="w", padx=24, pady=(14, 4)
@@ -2801,7 +2822,7 @@ class PasswordConfirmDialog(tk.Toplevel):
             font=mono_font(10, "bold"), width=max(160, text_width(title, mono_font(10, "bold")) + 44), height=38,
         ).pack(side="left", padx=6)
 
-        self.pw_entry.focus_set()
+        (self.pw_entry or self.confirm_entry).focus_set()
         finish_dialog(self, parent)
         self.bind("<Return>", lambda e: self._submit())
         self.bind("<Escape>", lambda e: self._cancel())
@@ -2829,12 +2850,12 @@ class PasswordConfirmDialog(tk.Toplevel):
         self.destroy()
 
     def _submit(self):
-        password = self.pw_entry.get()
+        password = self.pw_entry.get() if self.pw_entry is not None else ""
         confirm = self.confirm_entry.get()
         if confirm != self.confirm_word:
             self._fail(f'Confirmation must be exactly "{self.confirm_word}".', self.confirm_entry)
             return
-        if not password:
+        if not password and self.pw_entry is not None:
             self._fail("Password is required.", self.pw_entry)
             return
         self.result = password
@@ -3261,7 +3282,8 @@ class AddAppDialog(tk.Toplevel):
     something running right now -- then name it and say what it is.
     .result is the new custom-app dict, or None."""
 
-    SOURCES = [("path", "Program file"), ("flatpak", "Flatpak"), ("running", "Running now")]
+    SOURCES = ([("path", "Program file"), ("running", "Running now")] if plat.IS_WINDOWS
+               else [("path", "Program file"), ("flatpak", "Flatpak"), ("running", "Running now")])
 
     def __init__(self, parent, existing):
         super().__init__(parent)
@@ -3353,7 +3375,9 @@ class AddAppDialog(tk.Toplevel):
             row.pack(fill="x", padx=14, pady=(0, 6))
             dialog_entry(row, textvariable=self.path_var, width=34).pack(side="left", fill="x", expand=True, ipady=5)
             small_pill(row, "Browse...", self._browse, height=32, fg=INK).pack(side="left", padx=(8, 0))
-            tk.Label(self.panel, text="e.g. an AppImage or game in your home folder, /opt or /usr/games.",
+            tk.Label(self.panel, text=("e.g. a game's .exe in Program Files or your user folder."
+                                       if plat.IS_WINDOWS else
+                                       "e.g. an AppImage or game in your home folder, /opt or /usr/games."),
                      font=body_font(9), bg=SURFACE, fg=INK_FAINT).pack(anchor="w", padx=14, pady=(0, 12))
         else:
             if source == "flatpak":
@@ -3384,9 +3408,11 @@ class AddAppDialog(tk.Toplevel):
             anim.fade_in(self.panel, BG, 250)
 
     def _browse(self):
+        extra = {"filetypes": [("Programs", "*.exe")]} if plat.IS_WINDOWS else {}
         path = filedialog.askopenfilename(parent=self, title="Choose the program to block",
-                                          initialdir=os.path.expanduser("~"))
+                                          initialdir=os.path.expanduser("~"), **extra)
         if path:
+            path = os.path.normpath(path)   # Tk hands back C:/... on Windows
             self.path_var.set(path)
             if not self.name_var.get().strip():
                 self.name_var.set(guess_app_name(path))
@@ -3663,9 +3689,10 @@ class ScanPermissionDialog(tk.Toplevel):
         box.pack(fill="x", padx=24, pady=(14, 6))
         tk.Label(box, text="IT WOULD READ", font=mono_font(9, "bold"), bg=SURFACE, fg=CYAN).pack(
             anchor="w", padx=14, pady=(12, 4))
-        for line in ("Your app menu entries (including Flatpak and Snap apps)",
-                     "AppImages and Games folders in your home folder",
-                     "Your Steam library's list of games"):
+        for line in (("Your Start menu shortcuts", "Your Steam library's list of games") if plat.IS_WINDOWS else
+                     ("Your app menu entries (including Flatpak and Snap apps)",
+                      "AppImages and Games folders in your home folder",
+                      "Your Steam library's list of games")):
             tk.Label(box, text="\u2022  " + line, font=body_font(10), bg=SURFACE, fg=INK_DIM).pack(
                 anchor="w", padx=14)
         tk.Frame(box, bg=SURFACE, height=10).pack()
@@ -3717,6 +3744,10 @@ class FocusLockApp(tk.Tk):
         super().__init__()
         hint_floating(self, "utility")
         self.title("FocusLock")
+        if plat.IS_WINDOWS:
+            icon = os.path.join(SELF_DIR, "icon.ico")
+            if os.path.exists(icon):
+                self.iconbitmap(default=icon)   # default= covers dialogs too
         self.geometry("800x880")
         self.minsize(620, 620)
         self.resizable(True, True)
@@ -3989,7 +4020,7 @@ class FocusLockApp(tk.Tk):
     LOGGER_UNIT_PATH = os.path.join("~/.config/systemd/user", "focuslock-attempt-logger.service")
 
     def _ensure_logger(self):
-        if read_file(UNLOCK_AT_FILE) is None:
+        if not plat.HAS_ATTEMPT_WATCHER or read_file(UNLOCK_AT_FILE) is None:
             return
         try:
             if os.path.exists(os.path.expanduser(self.LOGGER_UNIT_PATH)):
@@ -4352,7 +4383,7 @@ class FocusLockApp(tk.Tk):
             anchor="w", padx=16, pady=(0, 10))
         last = load_settings().get("last_backup")
         try:
-            when = datetime.fromisoformat(last).strftime("%-d %b %Y, %H:%M") if last else None
+            when = fmt_date(datetime.fromisoformat(last), "%-d %b %Y, %H:%M") if last else None
         except (TypeError, ValueError):
             when = None
         row = tk.Frame(card, bg=SURFACE)
@@ -4367,6 +4398,14 @@ class FocusLockApp(tk.Tk):
         card = card_frame(parent)
         card.pack(fill="x", pady=8)
         card_title(card, "DISTRACTION LOGGING")
+        if not plat.HAS_ATTEMPT_WATCHER:
+            # Windows: the blocker itself logs each attempt; no site logger yet.
+            for text, fg in (("\u2713 Apps: every try to open a blocked app is logged, even while FocusLock "
+                              "is closed.", PINK),
+                             ("Websites: blocked, but attempts aren't counted on Windows yet.", INK_DIM)):
+                tk.Label(card, text=text, font=body_font(10, "bold"), bg=SURFACE, fg=fg, justify="left",
+                         wraplength=560).pack(anchor="w", padx=16, pady=(0, 6))
+            return
         locked = read_file(UNLOCK_AT_FILE) is not None
         if not locked:
             apps, apps_color = "Apps: logged whenever you try to open one during a lock.", INK
@@ -4456,7 +4495,7 @@ class FocusLockApp(tk.Tk):
             self.toast(str(e), "error", 5000)
             return
         try:
-            created = datetime.fromisoformat(backup.get("created", "")).strftime("%-d %b %Y at %H:%M")
+            created = fmt_date(datetime.fromisoformat(backup.get("created", "")), "%-d %b %Y at %H:%M")
         except (TypeError, ValueError):
             created = "at an unknown time"
         parts = [BACKUP_FILES[n][2] for n in BACKUP_FILES if n in backup["files"]]
@@ -4891,9 +4930,7 @@ class FocusLockApp(tk.Tk):
         if dlg.result is None:
             return
 
-        apply_script = privileged_script("focuslock-apply.sh")
-        cmd = [
-            "sudo", "-S", "-k", "bash", apply_script,
+        args = [
             unlock_human, unlock_calendar,
             ",".join(selected_apps) or "none",
             ",".join(selected_domains) or "none",
@@ -4923,13 +4960,14 @@ class FocusLockApp(tk.Tk):
                 style=self._celebration_style(),
             )
 
-        self._run_privileged(cmd, dlg.result, "ENGAGING LOCK", done, "Nothing was locked.")
+        self._run_privileged("apply", args, dlg.result, "ENGAGING LOCK", done, "Nothing was locked.")
 
-    def _run_privileged(self, cmd, password, busy_text, on_success, failure_note):
-        """Run a sudo command on a worker thread behind a spinner overlay, so
-        the window keeps animating instead of freezing. Tk is only touched
-        from the main thread: the worker just stores the result, which the
-        main loop polls for."""
+    def _run_privileged(self, action, args, password, busy_text, on_success, failure_note):
+        """Run a privileged step (sudo on Linux, a UAC prompt on Windows; see
+        focuslock_platform.run_privileged) on a worker thread behind a
+        spinner overlay, so the window keeps animating instead of freezing.
+        Tk is only touched from the main thread: the worker just stores the
+        result, which the main loop polls for."""
         self._busy = True
         if self._toast is not None and anim._alive(self._toast):
             self._toast.destroy()
@@ -4939,7 +4977,7 @@ class FocusLockApp(tk.Tk):
 
         def worker():
             try:
-                result["proc"] = subprocess.run(cmd, input=password + "\n", text=True, capture_output=True)
+                result["proc"] = plat.run_privileged(action, args, password)
             except Exception as e:  # e.g. sudo missing; reported below
                 result["error"] = e
         threading.Thread(target=worker, daemon=True).start()
@@ -4962,8 +5000,11 @@ class FocusLockApp(tk.Tk):
     @staticmethod
     def _failure_text(proc, error, note):
         if error is not None:
-            return f"Couldn't run sudo: {error}. {note}"
+            what = "the lock step" if plat.IS_WINDOWS else "sudo"
+            return f"Couldn't run {what}: {error}. {note}"
         stderr = (proc.stderr or "").strip()
+        if stderr == plat.UAC_CANCELLED:
+            return f"Administrator permission wasn't given. {note}"
         if "incorrect password" in stderr or "Sorry, try again" in stderr:
             return f"Wrong sudo password. {note}"
         tail = stderr[-400:] if stderr else "Unknown error."
@@ -6389,7 +6430,7 @@ class FocusLockApp(tk.Tk):
                      fg=INK_FAINT).pack(anchor="w")
             return
         d = day_details(day, load_history(), load_pomo_history(), load_goals()["met"], load_tasks(), load_attempts())
-        title = "TODAY" if day == date.today() else day.strftime("%A %-d %B").upper()
+        title = "TODAY" if day == date.today() else fmt_date(day, "%A %-d %B").upper()
         top = tk.Frame(box, bg=SURFACE)
         top.pack(fill="x", pady=(4, 6))
         tk.Label(top, text=title, font=mono_font(10, "bold"), bg=SURFACE, fg=YELLOW).pack(side="left")
@@ -6403,8 +6444,8 @@ class FocusLockApp(tk.Tk):
                 span = (f"{datetime.fromtimestamp(lk['start']):%H:%M}\u2013"
                         f"{'now' if lk['running'] else datetime.fromtimestamp(lk['end']).strftime('%H:%M')}")
                 if date.fromtimestamp(lk["start"]) != day or date.fromtimestamp(lk["end"]) != day:
-                    span = f"{datetime.fromtimestamp(lk['start']):%-d %b %H:%M} \u2192 " + (
-                        "now" if lk["running"] else f"{datetime.fromtimestamp(lk['end']):%-d %b %H:%M}")
+                    span = fmt_date(datetime.fromtimestamp(lk['start']), "%-d %b %H:%M") + " \u2192 " + (
+                        "now" if lk["running"] else fmt_date(datetime.fromtimestamp(lk['end']), "%-d %b %H:%M"))
             else:
                 span = "lock (no times recorded)"
             note = f" \u2014 {lk['intent']}" if lk["intent"] else ""
@@ -6908,11 +6949,7 @@ class FocusLockApp(tk.Tk):
             self._lock_started, self._unlock_epoch = progress
         else:
             self._lock_started = None
-            try:
-                self._unlock_epoch = int(subprocess.check_output(
-                    ["date", "-d", unlock_at, "+%s"], text=True).strip())
-            except (subprocess.CalledProcessError, ValueError):
-                self._unlock_epoch = None
+            self._unlock_epoch = parse_unlock_time(unlock_at)
         self.progress_bar = None
         self.progress_label = None
         if self._lock_started is not None and self._unlock_epoch:
@@ -7052,20 +7089,24 @@ class FocusLockApp(tk.Tk):
 
         reblock_human = run_date("+%A, %Y-%m-%d %H:%M:%S %Z", offset="+1 hour")
         reblock_calendar = run_date("+%Y-%m-%d %H:%M:%S", offset="+1 hour")
-        apply_script = privileged_script("focuslock-youtube-break-apply.sh")
-        cmd = ["sudo", "-S", "-k", "bash", apply_script, reblock_human, reblock_calendar]
 
         def done(overlay, _proc):
             overlay.leave(self._finish_busy)
             self.after(450, lambda: self.toast(
                 f"YouTube is unblocked until {reblock_human}. Use it well.", "info", 6000))
 
-        self._run_privileged(cmd, dlg.result, "UNBLOCKING YOUTUBE", done, "YouTube is still blocked.")
+        self._run_privileged("youtube", [reblock_human, reblock_calendar], dlg.result,
+                             "UNBLOCKING YOUTUBE", done, "YouTube is still blocked.")
 
 
 if __name__ == "__main__":
-    if sys.platform != "linux":
-        print("This tool is Linux-only.", file=sys.stderr)
+    if not (plat.IS_LINUX or plat.IS_WINDOWS):
+        print("FocusLock runs on Linux and Windows only.", file=sys.stderr)
         sys.exit(1)
     app = FocusLockApp()
+    if os.environ.get("FOCUSLOCK_SMOKE_TEST"):
+        # CI: open, draw for a few seconds, then exit cleanly (a crash in a
+        # windowed build shows an error box and never exits, so this is how
+        # the build check tells "started fine" apart from "crashed").
+        app.after(int(os.environ["FOCUSLOCK_SMOKE_TEST"]) * 1000, app.destroy)
     app.mainloop()

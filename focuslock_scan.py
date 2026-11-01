@@ -10,10 +10,12 @@ import os
 import re
 import shlex
 import shutil
+import subprocess
 
+import focuslock_platform as plat
 from focuslock_core import (
-    BUILTIN_NAMES, HIDDEN_FLATPAKS, check_custom_path, check_flatpak_id, core_package_paths,
-    load_custom_apps,
+    BUILTIN_NAMES as LINUX_BUILTIN_NAMES, HIDDEN_FLATPAKS, WIN_APP_EXES, check_custom_path, check_flatpak_id, core_package_paths,
+    load_custom_apps, win_exe_names,
 )
 
 HOME = os.path.expanduser("~")
@@ -30,6 +32,14 @@ STEAM_DIRS = [
     os.path.join(HOME, ".steam/steam/steamapps"),
     os.path.join(HOME, "snap/steam/common/.local/share/Steam/steamapps"),
 ]
+if plat.IS_WINDOWS:
+    STEAM_DIRS = [os.path.join(os.environ.get(v) or "", "Steam", "steamapps")
+                  for v in ("ProgramFiles(x86)", "ProgramFiles") if os.environ.get(v)]
+    START_MENU_DIRS = [os.path.join(os.environ.get(v) or "", "Microsoft", "Windows", "Start Menu", "Programs")
+                       for v in ("ProgramData", "APPDATA") if os.environ.get(v)]
+# Program names the built-in app list already covers.
+BUILTIN_NAMES = (set().union(*(win_exe_names(v) for v in WIN_APP_EXES.values())) if plat.IS_WINDOWS
+                 else LINUX_BUILTIN_NAMES)
 
 GAME, CHAT, MEDIA = "Game", "Chat", "Video & music"
 CATEGORY_KIND = {GAME: "game", CHAT: "other", MEDIA: "other"}
@@ -144,14 +154,68 @@ def _steam_library_games():
 def _walk_limited(root, max_depth):
     """Files under root, at most max_depth folders deep, skipping hidden
     and bulky folders."""
-    root_depth = root.rstrip("/").count("/")
+    root_depth = root.rstrip(os.sep).count(os.sep)
     for dirpath, dirnames, filenames in os.walk(root):
-        depth = dirpath.rstrip("/").count("/") - root_depth
+        depth = dirpath.rstrip(os.sep).count(os.sep) - root_depth
         dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in SKIP_DIRS]
         if depth >= max_depth:
             dirnames[:] = []
         for name in filenames:
             yield dirpath, name
+
+
+def _start_menu_shortcuts():
+    """[(shortcut name, target path)] for the Start Menu's .lnk files, read
+    with one PowerShell call (Windows has no simpler way to resolve them)."""
+    script = (
+        "[Console]::OutputEncoding = [Text.Encoding]::UTF8; $s = New-Object -ComObject WScript.Shell; "
+        "Get-ChildItem -LiteralPath $args -Recurse -Filter *.lnk -ErrorAction SilentlyContinue | "
+        "ForEach-Object { $t = $s.CreateShortcut($_.FullName).TargetPath; "
+        "if ($t) { $_.BaseName + [char]9 + $t } }")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script,
+                              *START_MENU_DIRS], capture_output=True, timeout=60,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    pairs = []
+    for line in out.decode("utf-8", "replace").splitlines():
+        name, sep, target = line.strip().partition("\t")
+        if sep and target.lower().endswith(".exe"):
+            pairs.append((name, target))
+    return pairs
+
+
+def _scan_windows(ignored, home):
+    custom_targets = {a.get("target") for a in load_custom_apps()}
+    candidates = {}
+
+    def consider(name, category, reason, target):
+        rid = f"path:{target}"
+        if rid in candidates or rid in ignored or target in custom_targets:
+            return
+        if os.path.basename(target).lower() in BUILTIN_NAMES or check_custom_path(target) is not None:
+            return
+        candidates[rid] = {"id": rid, "name": name, "category": category, "reason": reason,
+                           "source": "path", "target": target, "kind": CATEGORY_KIND[category]}
+
+    # 1. Start Menu shortcuts. No categories on Windows, so known names only.
+    for name, target in _start_menu_shortcuts():
+        category = _known_category(name, os.path.splitext(os.path.basename(target))[0])
+        if category:
+            consider(name, category, "A well-known entertainment app", target)
+
+    # 2. Programs in folders called Games in your user folder.
+    for dirpath, f in _walk_limited(home, 3):
+        if f.lower().endswith(".exe") and any(
+                part in GAME_FOLDER_NAMES for part in dirpath[len(home):].split(os.sep)):
+            stem = os.path.splitext(f)[0]
+            consider(stem, _known_category(stem) or GAME, "In a Games folder in your user folder",
+                     os.path.join(dirpath, f))
+
+    order = {GAME: 0, CHAT: 1, MEDIA: 2}
+    recs = sorted(candidates.values(), key=lambda r: (order[r["category"]], r["name"].lower()))
+    return {"recommendations": recs, "steam_games": sorted(_steam_library_games()), "snap_only": []}
 
 
 def scan(ignored=(), home=HOME):
@@ -161,6 +225,8 @@ def scan(ignored=(), home=HOME):
     Each recommendation: id, name, category, reason, source ("path" or
     "flatpak"), target, kind -- ready to become a custom app."""
     ignored = set(ignored)
+    if plat.IS_WINDOWS:
+        return _scan_windows(ignored, home)
     custom_targets = {a.get("target") for a in load_custom_apps()}
     candidates, steam_games, snap_only = {}, set(), set()
 

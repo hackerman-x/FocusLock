@@ -12,10 +12,11 @@ import math
 import os
 import random
 import shutil
-import subprocess
 import threading
 import time
 import wave
+
+import focuslock_platform as plat
 
 try:
     import numpy as np
@@ -25,7 +26,7 @@ except ImportError:  # works without numpy, just generates more slowly
 RATE = 44100
 LOOP_SECONDS = 30 if np is not None else 12
 VERSION = 1
-CACHE_DIR = os.path.join(os.path.expanduser("~/.cache/focuslock/ambient"), f"v{VERSION}")
+CACHE_DIR = os.path.join(plat.CACHE_DIR, "ambient", f"v{VERSION}")
 
 # Overall output level for focus sounds. They play for hours under your
 # work, so even full volume on the slider stays well below the app's other
@@ -445,19 +446,12 @@ class AmbientPlayer:
             if mine():
                 self.error, self.state = f"Couldn't prepare the sound: {e}", "idle"
             return
-        cmd = player_command()
-        if not cmd:
-            if mine():
-                self.error, self.state = "No audio player found (pw-cat, pacat or aplay).", "idle"
-            return
         if stop.is_set():
             return
-        try:
-            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL, start_new_session=True)
-        except OSError as e:
+        sink, error = plat.open_audio_sink(RATE, None if plat.IS_WINDOWS else player_command())
+        if sink is None:
             if mine():
-                self.error, self.state = f"Couldn't start audio: {e}", "idle"
+                self.error, self.state = error, "idle"
             return
         if mine():
             self.state = "playing"
@@ -484,7 +478,7 @@ class AmbientPlayer:
                                              for k, j in enumerate(idx))).tobytes()
                 gain += (target - gain) * 0.25  # ~0.2 s glide on every change
                 pos = end % len(samples)
-                proc.stdin.write(data)
+                sink.write(data)
                 written += self.CHUNK / RATE
                 ahead = written - (time.monotonic() - started)
                 if ahead > self.AHEAD:
@@ -492,14 +486,6 @@ class AmbientPlayer:
         except (BrokenPipeError, OSError):
             pass
         finally:
-            try:
-                proc.stdin.close()
-            except OSError:
-                pass
-            try:
-                proc.terminate()
-                proc.wait(timeout=1)
-            except (OSError, subprocess.TimeoutExpired):
-                proc.kill()
+            sink.close()
             if mine():
                 self.state = "idle"

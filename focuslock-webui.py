@@ -9,7 +9,6 @@ never touches sudo directly; every privileged call goes through the Api
 class below.
 """
 import os
-import subprocess
 import sys
 from datetime import datetime, date, timedelta
 
@@ -24,11 +23,13 @@ from datetime import datetime, date, timedelta
 # This is a real override, not setdefault(): a Wayland session sets
 # GDK_BACKEND=wayland in its own environment, so setdefault() would leave
 # that in place and silently do nothing.
-os.environ["GDK_BACKEND"] = "x11"
+if sys.platform.startswith("linux"):
+    os.environ["GDK_BACKEND"] = "x11"
 
 import webview
 
 import focuslock_core as core
+import focuslock_platform as plat
 
 SELF_DIR = os.path.dirname(os.path.abspath(__file__))
 WEBUI_DIR = os.path.join(SELF_DIR, "webui")
@@ -53,6 +54,12 @@ def _activity_payload(weeks=18):
 
     locked_count = sum(1 for dd in locked_days if range_start <= dd <= today)
     return {"weeks": weeks, "cells": cells, "locked_count": locked_count}
+
+
+def _error_text(proc, fallback):
+    if proc.stderr == plat.UAC_CANCELLED:
+        return "Administrator permission wasn't given."
+    return proc.stderr or fallback
 
 
 class Api:
@@ -90,11 +97,8 @@ class Api:
         }
 
     def seconds_until(self, unlock_at_str):
-        try:
-            ts = subprocess.check_output(["date", "-d", unlock_at_str, "+%s"], text=True).strip()
-            return int(ts) - int(datetime.now().timestamp())
-        except Exception:
-            return None
+        ts = core.parse_unlock_time(unlock_at_str)
+        return None if ts is None else ts - int(datetime.now().timestamp())
 
     def preview_duration(self, days, hours, minutes):
         offset = f"+{int(days)} days +{int(hours)} hours +{int(minutes)} minutes"
@@ -118,17 +122,11 @@ class Api:
         unlock_human = core.run_date("+%A, %Y-%m-%d %H:%M:%S %Z", offset=offset)
         unlock_calendar = core.run_date("+%Y-%m-%d %H:%M:%S", offset=offset)
 
-        apply_script = os.path.join(SELF_DIR, "focuslock-apply.sh")
-        cmd = [
-            "sudo", "-S", "-k", "bash", apply_script,
-            unlock_human, unlock_calendar,
-            ",".join(apps) or "none",
-            ",".join(domains) or "none",
-            intent or "",
-        ]
-        proc = subprocess.run(cmd, input=password + "\n", text=True, capture_output=True)
+        args = [unlock_human, unlock_calendar, ",".join(apps) or "none", ",".join(domains) or "none",
+                intent or ""]
+        proc = plat.run_privileged("apply", args, password or "")
         if proc.returncode != 0:
-            return {"ok": False, "error": proc.stderr or "Unknown error (check sudo password)."}
+            return {"ok": False, "error": _error_text(proc, "Unknown error (check sudo password).")}
 
         end_date = datetime.strptime(unlock_calendar.split()[0], "%Y-%m-%d").date()
         prev_stats = core.load_stats()
@@ -141,17 +139,15 @@ class Api:
     def youtube_break(self, password):
         reblock_human = core.run_date("+%A, %Y-%m-%d %H:%M:%S %Z", offset="+1 hour")
         reblock_calendar = core.run_date("+%Y-%m-%d %H:%M:%S", offset="+1 hour")
-        apply_script = os.path.join(SELF_DIR, "focuslock-youtube-break-apply.sh")
-        cmd = ["sudo", "-S", "-k", "bash", apply_script, reblock_human, reblock_calendar]
-        proc = subprocess.run(cmd, input=password + "\n", text=True, capture_output=True)
+        proc = plat.run_privileged("youtube", [reblock_human, reblock_calendar], password or "")
         if proc.returncode != 0:
-            return {"ok": False, "error": proc.stderr or "Unknown error."}
+            return {"ok": False, "error": _error_text(proc, "Unknown error.")}
         return {"ok": True, "reblock_human": reblock_human}
 
 
 if __name__ == "__main__":
-    if sys.platform != "linux":
-        print("This tool is Linux-only.", file=sys.stderr)
+    if not (plat.IS_LINUX or plat.IS_WINDOWS):
+        print("FocusLock runs on Linux and Windows only.", file=sys.stderr)
         sys.exit(1)
 
     api = Api()
@@ -183,5 +179,5 @@ if __name__ == "__main__":
     window.events.before_show += _hint_floating
     # Private mode (pywebview's default) leaves WebKitGTK without
     # localStorage, so the light/dark choice would never be remembered.
-    webview.start(gui="gtk", private_mode=False,
+    webview.start(gui="gtk" if plat.IS_LINUX else None, private_mode=False,
                   storage_path=os.path.join(core.CONFIG_DIR, "webview"))

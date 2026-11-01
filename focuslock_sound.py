@@ -10,13 +10,14 @@ import math
 import os
 import random
 import shutil
-import subprocess
 import time
 import wave
 
+import focuslock_platform as plat
+
 RATE = 44100
 VERSION = 1  # bump when any sound below changes, so caches regenerate
-CACHE_DIR = os.path.join(os.path.expanduser("~/.cache/focuslock/sounds"), f"v{VERSION}")
+CACHE_DIR = os.path.join(plat.CACHE_DIR, "sounds", f"v{VERSION}")
 MASTER = 0.6  # overall loudness (fraction of full scale)
 # Each sound is normalized to MASTER * its level here, so UI ticks stay
 # quiet and only the big moments (lock, badge, chime) are fuller.
@@ -162,14 +163,13 @@ def play(name, min_gap=0.05):
         return
     _last_played[name] = now
     if _player is None:
-        _player = _find_player()
-    if not _player:
+        _player = [] if plat.IS_WINDOWS else _find_player()
+    if not _player and not plat.IS_WINDOWS:
         return
     path = sound_path(name)
     try:
         if not os.path.exists(path):
             ensure_sounds()
-        subprocess.Popen(_player + [path], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, start_new_session=True)
-    except OSError:
+        plat.play_wav(path, _player)
+    except (OSError, RuntimeError):   # RuntimeError: winsound with no audio device
         pass
