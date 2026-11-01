@@ -80,7 +80,7 @@ jobs:
           FOCUSLOCK_VERSION_CODE: ${{ github.run_number }}
         run: |
           ./gradlew --no-daemon assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk "FocusLock-${GITHUB_REF_NAME}.apk"
+          cp app/build/outputs/apk/release/app-release.apk FocusLock.apk
 
       - name: Remove the signing key
         if: always()
@@ -88,4 +88,4 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: android/FocusLock-${{ github.ref_name }}.apk
+          files: android/FocusLock.apk

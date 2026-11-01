@@ -8,9 +8,12 @@ The phone and your computers don't sync. Each device has its own locks and stats
 
 ## Install
 
-Get `FocusLock-<version>.apk` from the
-[Releases](https://github.com/hackerman-x/FocusLock/releases) page, or the debug
-APK from the latest run of the **Android** workflow (Actions tab, `focuslock-debug-apk`).
+Get `FocusLock.apk` from the
+[Releases](https://github.com/hackerman-x/FocusLock/releases) page (the newest
+one is always at
+<https://github.com/hackerman-x/FocusLock/releases/latest/download/FocusLock.apk>),
+or the debug APK from the latest run of the **Android** workflow (Actions tab,
+`focuslock-debug-apk`).
 
 **On the phone:** open the APK and allow installs from your browser or file
 manager when Android asks.
@@ -18,7 +21,7 @@ manager when Android asks.
 **From a computer over USB** (turn on *Developer options → USB debugging* first):
 
 ```bash
-adb install -r FocusLock-v1.0.0.apk
+adb install -r FocusLock.apk
 ```
 
 Needs Android 8.0 or newer.
