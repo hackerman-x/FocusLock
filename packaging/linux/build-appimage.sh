@@ -45,12 +45,16 @@ rm -rf "$APPDIR/usr/share/metainfo" "$APPDIR/usr/share/applications"
 install -m 755 "$ROOT/packaging/AppRun" "$APPDIR/AppRun"
 cp "$ROOT/packaging/focuslock.desktop" "$APPDIR/focuslock.desktop"
 cp "$ROOT/icon.svg" "$APPDIR/focuslock.svg"
-ln -s focuslock.svg "$APPDIR/.DirIcon"
+# appimagetool wants a real PNG as the AppImage's own icon, not a symlink to an SVG
+cp "$ROOT/packaging/linux/focuslock.png" "$APPDIR/focuslock.png"
+cp "$ROOT/packaging/linux/focuslock.png" "$APPDIR/.DirIcon"
 find "$APPDIR" -name __pycache__ -type d -prune -exec rm -rf {} +
 
 echo "== appimagetool"
 curl -fsSL -o appimagetool \
   https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
 chmod +x appimagetool
+# newer appimagetool refuses folders and files that aren't readable by everyone
+chmod -R a+rX "$APPDIR"
 ./appimagetool --no-appstream "$APPDIR" "$OUT"
 echo "Built $OUT"
