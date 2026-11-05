@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FocusLock</string>
+    <string name="accessibility_description">Blocks the apps and websites you chose until your focus lock ends, and keeps FocusLock\'s own settings closed during a lock. FocusLock reads only which app is open, browser address bars and the text of Settings screens. Nothing leaves your phone.</string>
+    <string name="accessibility_summary">Blocks apps and websites during a lock</string>
+    <string name="admin_explanation">Stops FocusLock from being uninstalled while a lock is running. FocusLock asks for no other device admin powers.</string>
+    <string name="admin_disable_warning">FocusLock can\'t be removed during a lock. Outside a lock, use FocusLock → Settings → Allow uninstall.</string>
+    <string name="channel_lock">Active lock</string>
+    <string name="channel_events">Lock finished</string>
+    <string name="notif_lock_title">FocusLock is on</string>
+    <string name="notif_lock_text">Blocked until %1$s</string>
+    <string name="notif_done_title">Lock finished</string>
+    <string name="notif_done_text">Everything is unblocked. Nice work.</string>
+</resources>
