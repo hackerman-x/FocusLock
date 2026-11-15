@@ -88,9 +88,12 @@ fun ScanOnStart(st: AppState) {
     )
 }
 
-/** The scan's suggestions in the Apps panel, each with Add and Ignore. */
+/**
+ * The scan's suggestions in the Apps panel, each with Add and Ignore. Add only
+ * lists the app; it stays unticked until the user picks it.
+ */
 @Composable
-fun ScanSuggestions(st: AppState, onAdd: (String) -> Unit) {
+fun ScanSuggestions(st: AppState) {
     val ctx = LocalContext.current
     val c = FL.colors
     val scope = rememberCoroutineScope()
@@ -122,10 +125,7 @@ fun ScanSuggestions(st: AppState, onAdd: (String) -> Unit) {
                     }
                     Text(s.reason, fontSize = 12.sp, color = c.inkFaint)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                        GhostButton("Add", color = c.pink) {
-                            onAdd(s.pkg)
-                            scope.launch { Scanner.add(ctx, s.pkg) }
-                        }
+                        GhostButton("Add", color = c.pink) { scope.launch { Scanner.add(ctx, s.pkg) } }
                         GhostButton("Ignore") { scope.launch { Scanner.ignore(ctx, s.pkg) } }
                     }
                 }

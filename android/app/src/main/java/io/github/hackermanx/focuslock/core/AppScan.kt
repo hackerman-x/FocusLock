@@ -30,33 +30,40 @@ object AppScan {
     private const val SOCIAL = "social app"
     private const val VIDEO = "video app"
     private const val MUSIC = "music app"
+    private const val CHAT = "chat app"
 
-    /** Well-known distractions, whether or not they tag their category. */
+    /** Well-known distractions, whether or not they tag their category. The list the user chose. */
     val KNOWN: Map<String, String> = buildMap {
         listOf(
-            "com.zhiliaoapp.musically", "com.ss.android.ugc.trill", // TikTok
-            "com.snapchat.android", "com.reddit.frontdoor", "com.twitter.android", "com.facebook.katana",
-            "com.facebook.lite", "com.discord", "com.pinterest", "com.tumblr", "com.instagram.barcelona",
-            "com.instagram.android", "com.bereal.ft",
-        ).forEach { put(it, SOCIAL) }
-        listOf(
-            "com.google.android.youtube", "com.google.android.apps.youtube.kids", "app.revanced.android.youtube",
-            "org.schabi.newpipe", "com.netflix.mediaclient", "tv.twitch.android.app",
-            "com.amazon.avod.thirdpartyclient", "com.disney.disneyplus", "in.startv.hotstar",
-            "com.jio.media.ondemand", "com.wbd.stream", "com.hulu.plus", "com.crunchyroll.crunchyroid",
+            "com.google.android.youtube", "com.netflix.mediaclient",
+            "com.amazon.avod.thirdpartyclient", // Prime Video
+            "in.startv.hotstar", // JioHotstar
+            "com.disney.disneyplus", "tv.twitch.android.app",
         ).forEach { put(it, VIDEO) }
         listOf(
-            "com.spotify.music", "com.google.android.apps.youtube.music", "com.soundcloud.android",
-            "com.jio.media.jiobeats",
-        ).forEach { put(it, MUSIC) }
+            "com.instagram.android",
+            "com.zhiliaoapp.musically", "com.ss.android.ugc.trill", // TikTok
+            "com.snapchat.android", "com.facebook.katana", "com.twitter.android", "com.reddit.frontdoor",
+            "com.pinterest",
+            "com.instagram.barcelona", // Threads
+        ).forEach { put(it, SOCIAL) }
+        put("com.discord", CHAT)
+        listOf("com.spotify.music", "com.google.android.apps.youtube.music").forEach { put(it, MUSIC) }
         listOf(
-            "com.roblox.client", "com.mojang.minecraftpe", "com.valvesoftware.android.steam.community",
-            "com.supercell.clashofclans", "com.supercell.clashroyale", "com.supercell.brawlstars",
-            "com.kiloo.subwaysurf", "com.dts.freefireth", "com.dts.freefiremax", "com.tencent.ig",
-            "com.pubg.imobile", "com.activision.callofduty.shooter", "com.miHoYo.GenshinImpact",
-            "com.king.candycrushsaga", "com.innersloth.spacemafia", "com.epicgames.fortnite",
+            "com.roblox.client", "com.mojang.minecraftpe", "com.dts.freefireth", "com.dts.freefiremax",
+            "com.pubg.imobile", // BGMI
+            "com.tencent.ig", // PUBG Mobile
+            "com.activision.callofduty.shooter", "com.supercell.clashofclans", "com.supercell.clashroyale",
+            "com.supercell.brawlstars", "com.kiloo.subwaysurf", "com.king.candycrushsaga",
+            "com.miHoYo.GenshinImpact", "com.innersloth.spacemafia", "com.valvesoftware.android.steam.community",
         ).forEach { put(it, GAME) }
     }
+
+    /**
+     * Left out of [KNOWN] on purpose, since many people need them. Suggested
+     * only if they tag themselves as social, with a softer reason.
+     */
+    val MESSAGING = setOf("com.whatsapp", "org.telegram.messenger")
 
     /** Parts of a package name that mark a phone essential, never suggested. */
     private val ESSENTIAL_PARTS = listOf(
@@ -84,10 +91,11 @@ object AppScan {
             return Suggestion(app.pkg, app.label, if (kind == GAME) "A well-known game" else "A well-known $kind")
         }
         if (app.isSystem) return null
+        if (app.pkg in MESSAGING && app.category != CATEGORY_SOCIAL) return null
         val reason = when (app.category) {
             CATEGORY_GAME -> "Tagged as a game"
             CATEGORY_VIDEO -> "Tagged as a video app"
-            CATEGORY_SOCIAL -> "Tagged as a social app"
+            CATEGORY_SOCIAL -> if (app.pkg in MESSAGING) "Messaging app, only if it distracts you" else "Tagged as a social app"
             CATEGORY_AUDIO -> "Tagged as a music or audio app"
             CATEGORY_IMAGE -> {
                 val text = (app.pkg + " " + app.label).lowercase()

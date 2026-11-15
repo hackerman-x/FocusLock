@@ -127,7 +127,7 @@ fun LockScreen(st: AppState, now: Clocks, onSetup: () -> Unit) {
                 apps.filter { p -> listed.none { it.pkg == p } }.mapNotNull { byPkg[it] }.forEach { a ->
                     CheckRow(a.label, true) { apps = toggle(apps, a.pkg, it) }
                 }
-                ScanSuggestions(st, onAdd = { apps = apps + it })
+                ScanSuggestions(st)
                 GhostButton(if (showAllApps) "Hide app list" else "Choose from all apps") { showAllApps = !showAllApps }
                 if (showAllApps) {
                     OutlinedTextField(

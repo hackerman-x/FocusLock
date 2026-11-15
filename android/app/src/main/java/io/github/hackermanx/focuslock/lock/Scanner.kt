@@ -50,7 +50,7 @@ object Scanner {
         return scan(ctx)
     }
 
-    /** Add: list the app in the Apps panel (the caller ticks it). Nothing is blocked until a lock starts. */
+    /** Add: list the app in the Apps panel, unticked. Nothing is blocked until the user ticks it and starts a lock. */
     suspend fun add(ctx: Context, pkg: String) {
         ctx.app.repo.update { it.copy(addedApps = it.addedApps + pkg) }
         drop(pkg)

@@ -28,6 +28,34 @@ class AppScanTest {
         assertEquals("A well-known game", reason("com.roblox.client", "Roblox"))
         assertEquals("A well-known video app", reason("com.netflix.mediaclient", "Netflix", isSystem = true))
         assertEquals("A well-known music app", reason("com.spotify.music", "Spotify"))
+        assertEquals("A well-known chat app", reason("com.discord", "Discord"))
+    }
+
+    @Test
+    fun knownListIsExactlyTheChosenOne() {
+        val chosen = setOf(
+            "com.google.android.youtube", "com.netflix.mediaclient", "com.amazon.avod.thirdpartyclient",
+            "in.startv.hotstar", "com.disney.disneyplus", "tv.twitch.android.app",
+            "com.instagram.android", "com.zhiliaoapp.musically", "com.ss.android.ugc.trill", "com.snapchat.android",
+            "com.facebook.katana", "com.twitter.android", "com.reddit.frontdoor", "com.pinterest",
+            "com.instagram.barcelona",
+            "com.discord",
+            "com.spotify.music", "com.google.android.apps.youtube.music",
+            "com.roblox.client", "com.mojang.minecraftpe", "com.dts.freefireth", "com.dts.freefiremax",
+            "com.pubg.imobile", "com.tencent.ig", "com.activision.callofduty.shooter", "com.supercell.clashofclans",
+            "com.supercell.clashroyale", "com.supercell.brawlstars", "com.kiloo.subwaysurf",
+            "com.king.candycrushsaga", "com.miHoYo.GenshinImpact", "com.innersloth.spacemafia",
+            "com.valvesoftware.android.steam.community",
+        )
+        assertEquals(chosen, AppScan.KNOWN.keys)
+    }
+
+    @Test
+    fun messagingAppsOnlyWhenTaggedSocialWithASofterReason() {
+        assertNull(reason("com.whatsapp", "WhatsApp"))
+        assertNull(reason("org.telegram.messenger", "Telegram", CATEGORY_VIDEO))
+        assertEquals("Messaging app, only if it distracts you", reason("com.whatsapp", "WhatsApp", CATEGORY_SOCIAL))
+        assertEquals("Messaging app, only if it distracts you", reason("org.telegram.messenger", "Telegram", CATEGORY_SOCIAL))
     }
 
     @Test

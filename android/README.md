@@ -58,14 +58,17 @@ instead of the Play Store. To allow it:
 - **Lock tab:** pick how long (presets or days/hours/minutes), the apps, the
   websites, and an optional focus note, then type `LOCK` to confirm.
   FocusLock, the home screen, the phone app and Settings can't be blocked.
-  The app list starts with just YouTube and Instagram; the app scan suggests more.
+  The app list starts with just YouTube and Instagram, unticked; the app scan
+  suggests more.
 - **App scan:** the first time FocusLock opens, it asks *Find distractions for
   you?*. If you allow it, it reads the list of apps in your app drawer and each
   app's category, and suggests games, video, social and music apps (plus a list
   of well-known ones like TikTok, Roblox and Netflix) with the reason. Phone,
   Messages, Settings, Maps, Camera, keyboards and launchers are never suggested.
-  Tap **Add** to put an app in the list or **Ignore** to never see it again.
-  Nothing leaves the phone, and nothing is blocked until you add it and start a
+  WhatsApp and Telegram are only suggested if they tag themselves as social,
+  marked *Messaging app, only if it distracts you*. Tap **Add** to put an app
+  in the list (unticked: tick it to block it) or **Ignore** to never see it again.
+  Nothing leaves the phone, and nothing is blocked until you tick it and start a
   lock. Once allowed, it scans each time the app opens and marks new finds.
   *Scan now* / *Rescan* in the Apps panel and *Settings → App scan* turn it on
   or off.
