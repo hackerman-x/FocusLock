@@ -75,7 +75,11 @@ fun LockScreen(st: AppState, now: Clocks, onSetup: () -> Unit) {
         value = withContext(Dispatchers.IO) { AppCatalog.launchable(ctx) }
     }
     val byPkg = remember(installed) { installed.associateBy { it.pkg } }
-    val suggested = remember(installed) { Blocklist.SUGGESTED_PACKAGES.mapNotNull { byPkg[it] } }
+    // The defaults (YouTube, Instagram), then apps added from the scan.
+    val listed = remember(installed, st.addedApps) {
+        Blocklist.SUGGESTED_PACKAGES.mapNotNull { byPkg[it] } +
+            st.addedApps.filter { it !in Blocklist.SUGGESTED_PACKAGES }.mapNotNull { byPkg[it] }.sortedBy { it.label.lowercase() }
+    }
     val ready = remember(refresh) { Permissions.accessibilityOn(ctx) && Permissions.adminOn(ctx) }
     val privateDns = remember(refresh) { Permissions.privateDnsBypassesVpn(ctx) }
     val wantsSites = groups.isNotEmpty() || sites.isNotEmpty()
@@ -118,11 +122,12 @@ fun LockScreen(st: AppState, now: Clocks, onSetup: () -> Unit) {
         item {
             Panel("Apps") {
                 if (installed.isEmpty()) Body("Loading apps…")
-                suggested.forEach { a -> CheckRow(a.label, a.pkg in apps) { apps = toggle(apps, a.pkg, it) } }
+                listed.forEach { a -> CheckRow(a.label, a.pkg in apps) { apps = toggle(apps, a.pkg, it) } }
                 // Picked earlier from the full list.
-                apps.filter { p -> suggested.none { it.pkg == p } }.mapNotNull { byPkg[it] }.forEach { a ->
+                apps.filter { p -> listed.none { it.pkg == p } }.mapNotNull { byPkg[it] }.forEach { a ->
                     CheckRow(a.label, true) { apps = toggle(apps, a.pkg, it) }
                 }
+                ScanSuggestions(st, onAdd = { apps = apps + it })
                 GhostButton(if (showAllApps) "Hide app list" else "Choose from all apps") { showAllApps = !showAllApps }
                 if (showAllApps) {
                     OutlinedTextField(

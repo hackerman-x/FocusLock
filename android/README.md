@@ -58,6 +58,17 @@ instead of the Play Store. To allow it:
 - **Lock tab:** pick how long (presets or days/hours/minutes), the apps, the
   websites, and an optional focus note, then type `LOCK` to confirm.
   FocusLock, the home screen, the phone app and Settings can't be blocked.
+  The app list starts with just YouTube and Instagram; the app scan suggests more.
+- **App scan:** the first time FocusLock opens, it asks *Find distractions for
+  you?*. If you allow it, it reads the list of apps in your app drawer and each
+  app's category, and suggests games, video, social and music apps (plus a list
+  of well-known ones like TikTok, Roblox and Netflix) with the reason. Phone,
+  Messages, Settings, Maps, Camera, keyboards and launchers are never suggested.
+  Tap **Add** to put an app in the list or **Ignore** to never see it again.
+  Nothing leaves the phone, and nothing is blocked until you add it and start a
+  lock. Once allowed, it scans each time the app opens and marks new finds.
+  *Scan now* / *Rescan* in the Apps panel and *Settings → App scan* turn it on
+  or off.
 - **During a lock:** the Lock tab shows the countdown, what's blocked, whether
   each kind of protection is on, the YouTube break and the emergency switch.
   Opening a blocked app or site sends you home and shows *"… is blocked until …"*.
@@ -121,6 +132,7 @@ FocusLock is a commitment tool, not parental control. Someone determined can get
 | Part | File |
 |---|---|
 | App blocking, address bars, strict mode | `block/GuardService.kt` (an `AccessibilityService`) |
+| App scan | `core/AppScan.kt` (which apps to suggest, and why), `lock/Scanner.kt`, `ui/ScanUi.kt`. Reads the launcher app list through the manifest's `<queries>` entry, without `QUERY_ALL_PACKAGES` |
 | Website filter | `block/DnsVpnService.kt`: a `VpnService` that routes only a made-up DNS server address (`10.111.222.2`) into the tunnel. Blocked names (and their subdomains) get `0.0.0.0` / `::`; everything else is forwarded to your normal DNS server through a socket that bypasses the VPN. No other traffic goes through it. |
 | DNS packets | `core/DnsPacket.kt` |
 | Website groups | `core/Blocklist.kt`, copied from `DOMAIN_GROUPS` in `focuslock_core.py` |

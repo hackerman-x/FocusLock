@@ -46,6 +46,7 @@ import io.github.hackermanx.focuslock.ui.FocusLockTheme
 import io.github.hackermanx.focuslock.ui.LockScreen
 import io.github.hackermanx.focuslock.ui.Mono
 import io.github.hackermanx.focuslock.ui.OnboardingScreen
+import io.github.hackermanx.focuslock.ui.ScanOnStart
 import io.github.hackermanx.focuslock.ui.SettingsScreen
 import io.github.hackermanx.focuslock.ui.StatsScreen
 import kotlinx.coroutines.delay
@@ -119,6 +120,7 @@ private fun FocusLockRoot() {
                 MainTabs(onSetup = { showSetup = true })
             }
         }
+        ScanOnStart(st)
     }
 }
 

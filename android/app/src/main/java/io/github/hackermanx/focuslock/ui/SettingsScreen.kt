@@ -34,6 +34,7 @@ import io.github.hackermanx.focuslock.core.EmergencySwitch
 import io.github.hackermanx.focuslock.core.Format
 import io.github.hackermanx.focuslock.data.AppState
 import io.github.hackermanx.focuslock.lock.Permissions
+import io.github.hackermanx.focuslock.lock.Scanner
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
@@ -86,6 +87,26 @@ fun SettingsScreen(st: AppState, lockActive: Boolean, onSetup: () -> Unit) {
                     val site = Blocklist.normalizeSite(newSite) ?: return@GhostButton
                     newSite = ""
                     update { s -> if (site in s.customSites) s else s.copy(customSites = s.customSites + site) }
+                }
+            }
+        }
+
+        Panel("App scan") {
+            Body(
+                when (st.scanConsent) {
+                    true -> "On. Each time FocusLock opens, it reads your app list and suggests distractions on the Lock tab."
+                    false -> "Off. You can still scan once from Lock → Apps."
+                    null -> "Not asked yet."
+                },
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (st.scanConsent == true) {
+                    GhostButton("Turn off scanning") { scope.launch { Scanner.setConsent(ctx, false) } }
+                } else {
+                    GhostButton("Turn on scanning") { scope.launch { Scanner.setConsent(ctx, true) } }
+                }
+                if (st.scanIgnored.isNotEmpty()) {
+                    GhostButton("Forget ${st.scanIgnored.size} ignored") { update { it.copy(scanIgnored = emptySet()) } }
                 }
             }
         }

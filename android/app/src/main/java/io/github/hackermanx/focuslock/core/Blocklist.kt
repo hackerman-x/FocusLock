@@ -27,20 +27,13 @@ object Blocklist {
 
     val YOUTUBE_PACKAGES = setOf("com.google.android.youtube")
 
-    /** Apps shown first in the app picker, when they're installed. */
+    /**
+     * The only apps in the app picker before any scan, when installed. The
+     * scan (AppScan) suggests the rest.
+     */
     val SUGGESTED_PACKAGES = listOf(
-        "com.instagram.android",
         "com.google.android.youtube",
-        "com.zhiliaoapp.musically",
-        "com.ss.android.ugc.trill",
-        "com.discord",
-        "com.roblox.client",
-        "com.mojang.minecraftpe",
-        "com.snapchat.android",
-        "com.reddit.frontdoor",
-        "com.twitter.android",
-        "com.facebook.katana",
-        "com.valvesoftware.android.steam.community",
+        "com.instagram.android",
     )
 
     /** Address-bar view ids in the browsers the accessibility service reads. */

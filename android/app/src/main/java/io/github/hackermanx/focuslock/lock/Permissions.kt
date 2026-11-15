@@ -4,6 +4,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Uri
@@ -15,6 +16,7 @@ import android.telecom.TelecomManager
 import androidx.core.app.NotificationManagerCompat
 import io.github.hackermanx.focuslock.R
 import io.github.hackermanx.focuslock.block.GuardService
+import io.github.hackermanx.focuslock.core.ScanCandidate
 import io.github.hackermanx.focuslock.core.ScreenRules
 
 /** What FocusLock needs from Android, and the screens that grant it. */
@@ -76,14 +78,29 @@ object AppCatalog {
         return setOfNotNull(ctx.packageName, home, dialer)
     }
 
-    fun launchable(ctx: Context): List<AppInfo> {
+    fun launchable(ctx: Context): List<AppInfo> =
+        scanCandidates(ctx).map { AppInfo(it.pkg, it.label) }.sortedBy { it.label.lowercase() }
+
+    /**
+     * Every launchable app with its category, for the app scan. The manifest's
+     * <queries> entry for launcher activities makes these visible on Android 11+,
+     * ApplicationInfo included, so QUERY_ALL_PACKAGES isn't needed.
+     */
+    fun scanCandidates(ctx: Context): List<ScanCandidate> {
         val pm = ctx.packageManager
         val excluded = neverBlock(ctx)
         return pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
-            .map { AppInfo(it.activityInfo.packageName, it.loadLabel(pm).toString()) }
-            .distinctBy { it.pkg }
-            .filter { it.pkg !in excluded && !ScreenRules.watches(it.pkg) }
-            .sortedBy { it.label.lowercase() }
+            .distinctBy { it.activityInfo.packageName }
+            .filter { it.activityInfo.packageName !in excluded && !ScreenRules.watches(it.activityInfo.packageName) }
+            .map {
+                val info = it.activityInfo.applicationInfo
+                ScanCandidate(
+                    pkg = it.activityInfo.packageName,
+                    label = it.loadLabel(pm).toString(),
+                    category = info.category,
+                    isSystem = info.flags and ApplicationInfo.FLAG_SYSTEM != 0,
+                )
+            }
     }
 
     fun label(ctx: Context, pkg: String): String = try {
