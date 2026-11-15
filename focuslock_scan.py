@@ -6,6 +6,7 @@ needs the user to press Add.
 
 Runs on a worker thread, so nothing here touches Tk.
 """
+import ntpath
 import os
 import re
 import shlex
@@ -51,15 +52,23 @@ KNOWN = {
            "retroarch", "dolphin-emu", "pcsx2", "ppsspp", "rpcs3", "ryujinx", "yuzu", "citra",
            "cemu", "xemu", "duckstation", "mgba", "flycast", "mame", "minetest", "luanti",
            "supertuxkart", "supertux", "0ad", "wesnoth", "openttd", "osu", "roblox", "vinegar",
-           "gamehub", "playnite", "bottles", "minecraft", "tlauncher"],
+           "gamehub", "playnite", "bottles", "minecraft", "tlauncher", "sober",
+           # Windows launchers, by Start Menu name and by program file name
+           "epic games", "epicgameslauncher", "gog galaxy", "galaxyclient", "battle.net",
+           "ea app", "eadesktop", "ubisoft connect", "ubisoftconnect", "riot client",
+           "riotclientservices", "league of legends", "leagueclient", "valorant", "fortnite",
+           "genshin impact", "overwatch", "apex legends", "rocket league"],
     CHAT: ["telegram", "whatsapp", "signal", "element", "revolt", "guilded", "vesktop",
            "webcord", "armcord", "legcord", "caprine", "ferdium", "franz", "slack", "teams"],
     MEDIA: ["spotify", "freetube", "youtube", "netflix", "twitch", "streamlink", "stremio",
-            "kodi", "jellyfin", "plex", "popcorn", "tiktok", "instagram", "reddit", "mpv", "celluloid"],
+            "kodi", "jellyfin", "plex", "popcorn", "tiktok", "instagram", "reddit", "mpv", "celluloid",
+            "prime video", "hotstar", "jiohotstar", "disney+"],
 }
 # Creative tools get media-ish categories but aren't distractions.
 NOT_ENTERTAINMENT_CATEGORIES = {"AudioVideoEditing", "Mixer", "Settings", "Midi",
                                 "Development", "IDE", "Graphics", "2DGraphics", "3DGraphics"}
+# Uninstallers and updaters that Start Menu folders often hold next to the app.
+WIN_HELPER_EXE = re.compile(r"(?i)^(unins\d*|uninst\w*|uninstall\w*|update|updater)$")
 GAME_FOLDER_NAMES = {"games", "Games", "GOG Games", "itch"}
 SKIP_DIRS = {"node_modules", "venv", ".venv", "__pycache__", "snap", "Steam", "site-packages", ".git"}
 
@@ -201,7 +210,10 @@ def _scan_windows(ignored, home):
 
     # 1. Start Menu shortcuts. No categories on Windows, so known names only.
     for name, target in _start_menu_shortcuts():
-        category = _known_category(name, os.path.splitext(os.path.basename(target))[0])
+        stem = ntpath.splitext(ntpath.basename(target))[0]   # ntpath: Windows paths, also in tests
+        if "uninstall" in name.lower() or WIN_HELPER_EXE.match(stem):
+            continue   # "Uninstall Spotify" is not Spotify
+        category = _known_category(name, stem)
         if category:
             consider(name, category, "A well-known entertainment app", target)
 
