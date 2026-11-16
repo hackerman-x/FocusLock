@@ -34,7 +34,8 @@ def imports_of(path):
 a = Analysis(
     [os.path.join(ROOT, "focuslock_main.py")],
     pathex=[ROOT],
-    datas=[(GUI, "."), (os.path.join(SPECPATH, "icon.ico"), ".")],
+    datas=[(GUI, "."), (os.path.join(SPECPATH, "icon.ico"), "."),
+           (os.path.join(ROOT, "fonts"), "fonts")],   # bundled fonts (focuslock_platform.load_bundled_fonts)
     hiddenimports=sorted(imports_of(GUI) | {"focuslock_win", "psutil", "sounddevice", "numpy", "winsound",
                                             "tkinter.filedialog", "tkinter.font"}),
     excludes=["webview", "gi"],

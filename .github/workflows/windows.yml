@@ -27,6 +27,10 @@ jobs:
       - name: Unit tests
         run: python -m pytest tests -q
 
+      - name: Bundled fonts reach Tk
+        run: |
+          python -c "import focuslock_platform as p, tkinter, tkinter.font as f; n = p.load_bundled_fonts(); r = tkinter.Tk(); fams = set(f.families()); assert n == 4 and {'DejaVu Sans', 'DejaVu Sans Mono'} <= fams, (n, sorted(fams)); print('bundled fonts loaded:', n)"
+
       - name: Build FocusLock.exe
         run: pyinstaller packaging/windows/focuslock.spec --noconfirm --distpath dist --workpath build
 

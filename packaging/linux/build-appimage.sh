@@ -39,6 +39,7 @@ echo "== numpy (ambient sounds)"
 echo "== FocusLock"
 mkdir -p "$APPDIR/usr/share/focuslock"
 cp "$ROOT"/*.py "$ROOT"/*.sh "$ROOT/icon.svg" "$APPDIR/usr/share/focuslock/"
+cp -r "$ROOT/fonts" "$APPDIR/usr/share/focuslock/"   # bundled fonts (focuslock_platform.load_bundled_fonts)
 # Python's own launcher, menu entry and metadata make way for FocusLock's.
 rm -f "$APPDIR/AppRun" "$APPDIR"/*.desktop "$APPDIR"/*.png "$APPDIR/.DirIcon"
 rm -rf "$APPDIR/usr/share/metainfo" "$APPDIR/usr/share/applications"

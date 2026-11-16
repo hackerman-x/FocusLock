@@ -149,6 +149,7 @@ THEME_NAMES = [("dark", "Dark"), ("light", "Light"), ("synthwave", "Synthwave"),
                ("forest", "Forest"), ("paper", "Paper"), ("mono", "Mono"), ("custom", "Custom"),
                ("sunset", "Sunset"), ("gold", "Gold"), ("aurora", "Aurora"),
                ("midnight", "Midnight"), ("sakura", "Sakura"), ("matrix", "Matrix")]
+DEFAULT_THEME = "mono"   # what a fresh install looks like, on every system
 current_theme_name = "dark"
 
 # The "custom" theme: the user picks these six colours in Settings and the
@@ -213,10 +214,11 @@ set_custom_colors(default_custom_colors())
 # installed wins, and the last entries are common fallbacks so every preset
 # still renders on a machine that lacks the headline font.
 FONT_PRESETS = {
+    # The default. DejaVu ships with FocusLock (fonts/), so it looks the same everywhere.
     "retro": ("Retro", {
-        "display": ["Px TandyNew Mono", "DejaVu Sans Mono", "Ubuntu Mono"],
-        "mono": ["Ubuntu Mono", "DejaVu Sans Mono", "Liberation Mono"],
-        "body": ["Ubuntu", "DejaVu Sans", "Liberation Sans"]}),
+        "display": ["DejaVu Sans Mono", "Px TandyNew Mono", "Ubuntu Mono"],
+        "mono": ["DejaVu Sans Mono", "Ubuntu Mono", "Liberation Mono"],
+        "body": ["DejaVu Sans", "Ubuntu", "Liberation Sans"]}),
     "clean": ("Clean", {
         "display": ["Lato", "Ubuntu Sans", "Noto Sans", "DejaVu Sans"],
         "mono": ["Fira Code", "Ubuntu Sans Mono", "DejaVu Sans Mono", "Liberation Mono"],
@@ -289,7 +291,7 @@ def apply_theme(name):
     PINK_HOVER, CYAN_HOVER = anim.lighten(PINK, 0.22), anim.lighten(CYAN, 0.25)
 
 
-apply_theme("dark")
+apply_theme(DEFAULT_THEME)
 
 # Short lines rotated under the countdown while locked.
 FOCUS_TIPS = [
@@ -361,6 +363,25 @@ def hint_floating(window, wtype="dialog"):
         window.attributes("-type", wtype)
     except tk.TclError:
         pass
+
+
+def windows_title_bar(window):
+    """Windows draws its own title bar: make it dark when the theme is, so the
+    window matches the Linux look. Windows 10 20H1+ and 11; no-op elsewhere."""
+    if not plat.IS_WINDOWS:
+        return
+    try:
+        import ctypes
+        r, g, b = (int(BG[i:i + 2], 16) for i in (1, 3, 5))
+        dark = ctypes.c_int(1 if (0.299 * r + 0.587 * g + 0.114 * b) < 128 else 0)
+        window.update_idletasks()
+        hwnd = int(window.wm_frame(), 16)
+        for attr in (20, 19):   # DWMWA_USE_IMMERSIVE_DARK_MODE (19 on early Windows 10 builds)
+            if ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(dark),
+                                                          ctypes.sizeof(dark)) == 0:
+                break
+    except Exception:
+        pass   # older Windows: keep the default title bar
 
 
 def fmt_date(when, fmt):
@@ -3741,7 +3762,12 @@ DURATION_CHIPS = [
 
 class FocusLockApp(tk.Tk):
     def __init__(self):
+        plat.load_bundled_fonts()   # must come before Tk starts using fonts
         super().__init__()
+        if plat.IS_WINDOWS:
+            # Linux draws at 96 dpi (1.333 px per point); Windows' own value
+            # varies with display scaling and would resize every font.
+            self.tk.call("tk", "scaling", 96 / 72)
         hint_floating(self, "utility")
         self.title("FocusLock")
         if plat.IS_WINDOWS:
@@ -3761,8 +3787,9 @@ class FocusLockApp(tk.Tk):
         set_custom_colors(load_custom_colors())
         apply_font_preset(settings.get("font_preset", "retro"))
         apply_text_size(settings.get("text_size", "default"))
-        saved_theme = settings.get("theme", "dark")
-        apply_theme(saved_theme if saved_theme in _THEMES else "dark")
+        saved_theme = settings.get("theme", DEFAULT_THEME)
+        apply_theme(saved_theme if saved_theme in _THEMES else DEFAULT_THEME)
+        windows_title_bar(self)
         self.app_vars = {key: tk.BooleanVar(value=key not in dev) for key, _ in all_apps()}
         self.domain_vars = {key: tk.BooleanVar(value=True) for key, _ in all_domains()}
         self.days_var = tk.IntVar(value=2)
@@ -4526,13 +4553,14 @@ class FocusLockApp(tk.Tk):
         self._sync_app_vars()
         self._sync_domain_vars()
         self._sync_badges(announce=False)
-        theme = settings.get("theme", "dark")
+        theme = settings.get("theme", DEFAULT_THEME)
 
         def change():
             set_custom_colors(load_custom_colors())
             apply_font_preset(settings.get("font_preset", "retro"))
             apply_text_size(settings.get("text_size", "default"))
-            apply_theme(theme if theme in _THEMES else "dark")
+            apply_theme(theme if theme in _THEMES else DEFAULT_THEME)
+            windows_title_bar(self)
         self._restyle(change)
 
     # ---------- setup (unlocked) view ----------

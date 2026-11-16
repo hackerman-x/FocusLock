@@ -167,6 +167,40 @@ def notify(title, message):
         pass
 
 
+# ---------- bundled fonts ----------
+# FocusLock ships its own fonts (fonts/, DejaVu) so every system draws the
+# window the same way, whatever is installed. They're registered for this
+# process only -- nothing is installed system-wide.
+
+FONTS_DIR = os.path.join(getattr(sys, "_MEIPASS", SELF_DIR), "fonts")   # _MEIPASS: PyInstaller build
+
+
+def load_bundled_fonts():
+    """Make fonts/*.ttf available to Tk. Call before the first Tk() is
+    created. Returns how many font files were registered; never raises."""
+    try:
+        files = sorted(os.path.join(FONTS_DIR, f) for f in os.listdir(FONTS_DIR)
+                       if f.lower().endswith((".ttf", ".otf")))
+    except OSError:
+        return 0
+    try:
+        import ctypes
+        if IS_WINDOWS:
+            FR_PRIVATE = 0x10
+            add = ctypes.windll.gdi32.AddFontResourceExW
+            add.argtypes = [ctypes.c_wchar_p, ctypes.c_uint, ctypes.c_void_p]
+            return sum(1 for path in files if add(path, FR_PRIVATE, None) > 0)
+        # Linux: Tk draws text with Xft/fontconfig in this same process, so
+        # adding the folder to fontconfig's current config is enough.
+        import ctypes.util
+        name = ctypes.util.find_library("fontconfig") or "libfontconfig.so.1"
+        fc = ctypes.CDLL(name)
+        fc.FcConfigAppFontAddDir.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        return len(files) if fc.FcConfigAppFontAddDir(None, FONTS_DIR.encode()) else 0
+    except Exception:
+        return 0
+
+
 # ---------- audio ----------
 
 def play_wav(path, linux_player):
