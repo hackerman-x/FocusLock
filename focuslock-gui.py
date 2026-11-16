@@ -3690,7 +3690,8 @@ class RestoreConfirmDialog(tk.Toplevel):
 class ScanPermissionDialog(tk.Toplevel):
     """Asked once, on first launch: may FocusLock look through this
     computer's installed apps for things to suggest blocking? .result is
-    True (allow) or False (not now -- the Apps tab keeps an Allow button)."""
+    True (allow), False (not now -- the Apps tab keeps an Allow button), or
+    None if FocusLock itself was closed before an answer (ask again next time)."""
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -3698,7 +3699,7 @@ class ScanPermissionDialog(tk.Toplevel):
         self.title("Find distractions for you?")
         self.configure(bg=BG)
         self.resizable(False, False)
-        self.result = False
+        self.result = None
         self.protocol("WM_DELETE_WINDOW", self._no)
 
         tk.Label(self, text="FIND DISTRACTIONS FOR YOU?", font=display_font(15, "bold"), bg=BG, fg=YELLOW).pack(
@@ -5208,6 +5209,8 @@ class FocusLockApp(tk.Tk):
                 return
             dlg = ScanPermissionDialog(self)
             self.wait_window(dlg)
+            if dlg.result is None:
+                return   # FocusLock closed before an answer: ask on the next start
             self._set_scan_consent(dlg.result)
         elif consent:
             self._start_scan()
@@ -7136,5 +7139,15 @@ if __name__ == "__main__":
         # CI: open, draw for a few seconds, then exit cleanly (a crash in a
         # windowed build shows an error box and never exits, so this is how
         # the build check tells "started fine" apart from "crashed").
-        app.after(int(os.environ["FOCUSLOCK_SMOKE_TEST"]) * 1000, app.destroy)
+        def smoke_exit():
+            # FOCUSLOCK_SMOKE_REPORT: list the dialogs that were open, so CI can
+            # check e.g. that a fresh install asks to scan.
+            report = os.environ.get("FOCUSLOCK_SMOKE_REPORT")
+            if report:
+                titles = [w.title() for w in app.winfo_children()
+                          if isinstance(w, tk.Toplevel) and w.winfo_viewable()]
+                with open(report, "w", encoding="utf-8") as f:
+                    f.write("\n".join(titles) + "\n")
+            app.destroy()
+        app.after(int(os.environ["FOCUSLOCK_SMOKE_TEST"]) * 1000, smoke_exit)
     app.mainloop()

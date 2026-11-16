@@ -32,7 +32,11 @@ jobs:
       - name: Window opens (smoke test)
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
-          FOCUSLOCK_SMOKE_TEST=8 APPIMAGE_EXTRACT_AND_RUN=1 timeout 120 xvfb-run -a dist/FocusLock.AppImage
+          FOCUSLOCK_SMOKE_TEST=8 FOCUSLOCK_SMOKE_REPORT="$PWD/smoke.txt" APPIMAGE_EXTRACT_AND_RUN=1 \
+            timeout 120 xvfb-run -a dist/FocusLock.AppImage
+          # A fresh install must ask to scan for distractions on its first start.
+          echo "Open dialogs:"; cat smoke.txt
+          grep -qx "Find distractions for you?" smoke.txt
 
       - uses: actions/upload-artifact@v4
         with:

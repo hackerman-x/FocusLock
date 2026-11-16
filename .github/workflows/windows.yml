@@ -60,6 +60,7 @@ jobs:
         shell: pwsh
         run: |
           $env:FOCUSLOCK_SMOKE_TEST = "15"
+          $env:FOCUSLOCK_SMOKE_REPORT = "$PWD\smoke.txt"
           $p = Start-Process "$env:ProgramFiles\FocusLock\FocusLock.exe" -PassThru
           Start-Sleep -Seconds 8
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing
@@ -69,6 +70,10 @@ jobs:
           $bmp.Save("$PWD\gui.png")
           if (-not $p.WaitForExit(60000)) { Stop-Process $p -Force; throw "FocusLock didn't exit: probably an error dialog (see gui.png)" }
           if ($p.ExitCode -ne 0) { throw "FocusLock exited with $($p.ExitCode)" }
+          # A fresh install must ask to scan for distractions on its first start.
+          $open = Get-Content smoke.txt
+          Write-Host "Open dialogs: $open"
+          if (-not ($open -contains "Find distractions for you?")) { throw "The first-start scan prompt didn't appear" }
 
       - uses: actions/upload-artifact@v4
         if: always()
